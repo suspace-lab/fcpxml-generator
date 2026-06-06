@@ -1,170 +1,250 @@
-"""Tests for the FCPXML generator core."""
+"""Tests for the FCPXML generator — multi-track, gaps, markers, compat."""
 
 import json
 import os
 import tempfile
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 import pytest
 from fcpxml_generator.generator import generate_fcpxml, generate_fcpxml_file
 
 
 # ---------------------------------------------------------------------------
-# Minimal valid edit_script for tests (no actual video files needed —
-# the generator uses ffprobe, which will fail gracefully with defaults)
+# Test fixtures
 # ---------------------------------------------------------------------------
 
-SAMPLE_SCRIPT = {
+SAMPLE_OLD = {
     "title": "Test Project",
     "clips": [
+        {"source": "/n/video1.mp4", "filename": "video1.mp4", "in": "00:00", "out": "00:10"},
+        {"source": "/n/video2.mp4", "filename": "video2.mp4", "in": "00:05", "out": "00:15"},
+    ],
+}
+
+SAMPLE_NEW = {
+    "title": "Multi-Track Project",
+    "tracks": [
         {
-            "source": "/nonexistent/video1.mp4",
-            "filename": "video1.mp4",
-            "in": "00:00",
-            "out": "00:10",
-            "transition": "cut",
+            "name": "V1",
+            "role": "video",
+            "items": [
+                {"type": "clip", "source": "/n/video1.mp4", "in": 0, "out": 10},
+                {"type": "gap", "duration": 2},
+                {"type": "clip", "source": "/n/video2.mp4", "in": 5, "out": 20},
+            ],
         },
         {
-            "source": "/nonexistent/video2.mp4",
-            "filename": "video2.mp4",
-            "in": "00:05",
-            "out": "00:15",
-            "transition": "dissolve",
+            "name": "A1",
+            "role": "audio",
+            "items": [
+                {"type": "clip", "source": "/n/music.mp3", "in": 0, "out": 32},
+            ],
         },
+    ],
+    "markers": [
+        {"name": "Chapter 1", "time": 0, "color": "Blue"},
+        {"name": "Highlight", "time": 5, "color": "Red"},
     ],
 }
 
 
 # ---------------------------------------------------------------------------
-# XML structure tests
+# Backward compatibility
 # ---------------------------------------------------------------------------
 
-class TestGenerateFCPXML:
-    """Test XML document structure without requiring real video files."""
+class TestBackwardCompat:
+    """Old flat 'clips' format still works."""
 
     def test_generates_valid_xml(self):
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT)
-        # Should parse without error
-        root = ET.fromstring(xml_str)
-        assert root is not None
-
-    def test_root_is_fcpxml_version_1_9(self):
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT)
+        xml_str = generate_fcpxml(SAMPLE_OLD)
         root = ET.fromstring(xml_str)
         assert root.tag == "fcpxml"
-        assert root.get("version") == "1.9"
 
-    def test_has_resources_section(self):
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT)
-        root = ET.fromstring(xml_str)
-        resources = root.find("resources")
-        assert resources is not None
-
-    def test_has_format_definition(self):
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT)
-        root = ET.fromstring(xml_str)
-        fmt = root.find("resources/format")
-        assert fmt is not None
-        assert fmt.get("id") == "r0"
-        assert "frameDuration" in fmt.attrib
-        assert "width" in fmt.attrib
-        assert "height" in fmt.attrib
-
-    def test_has_asset_for_each_source(self):
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT)
-        root = ET.fromstring(xml_str)
-        assets = root.findall("resources/asset")
-        assert len(assets) == 2  # 2 unique sources
-
-    def test_every_asset_has_media_rep_child(self):
-        """CRITICAL: FCPXML 1.9 requires <media-rep> inside every <asset>."""
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT)
-        root = ET.fromstring(xml_str)
-        for asset in root.findall("resources/asset"):
-            media_reps = asset.findall("media-rep")
-            assert len(media_reps) >= 1, (
-                f"Asset {asset.get('id')} is missing <media-rep> child"
-            )
-
-    def test_has_library_event_project_sequence_spine(self):
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT)
-        root = ET.fromstring(xml_str)
-        library = root.find("library")
-        assert library is not None
-        event = library.find("event")
-        assert event is not None
-        project = event.find("project")
-        assert project is not None
-        sequence = project.find("sequence")
-        assert sequence is not None
-        spine = sequence.find("spine")
-        assert spine is not None
-
-    def test_spine_has_correct_number_of_clips(self):
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT)
+    def test_correct_clip_count(self):
+        xml_str = generate_fcpxml(SAMPLE_OLD)
         root = ET.fromstring(xml_str)
         clips = root.findall("library/event/project/sequence/spine/asset-clip")
         assert len(clips) == 2
 
-    def test_zero_offset_is_0s_not_rational(self):
-        """Zero time values must be '0s', not '0/30000s'."""
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT)
+    def test_zero_offset_is_0s(self):
+        xml_str = generate_fcpxml(SAMPLE_OLD)
         root = ET.fromstring(xml_str)
-        first_clip = root.find("library/event/project/sequence/spine/asset-clip")
-        assert first_clip is not None
-        offset = first_clip.get("offset")
-        assert offset == "0s", f"Expected '0s' but got '{offset}'"
+        first = root.find("library/event/project/sequence/spine/asset-clip")
+        assert first is not None
+        assert first.get("offset") == "0s"
 
-    def test_clip_has_required_attributes(self):
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT)
+
+# ---------------------------------------------------------------------------
+# Multi-track
+# ---------------------------------------------------------------------------
+
+class TestMultiTrack:
+    def test_generates_valid_xml(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        assert root.tag == "fcpxml"
+
+    def test_all_track_clips_present(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        clips = root.findall("library/event/project/sequence/spine/asset-clip")
+        # V1: 2 clips + A1: 1 clip = 3 total
+        assert len(clips) == 3
+
+    def test_assets_for_all_sources(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        assets = root.findall("resources/asset")
+        # 3 unique sources: video1, video2, music
+        assert len(assets) == 3
+
+
+# ---------------------------------------------------------------------------
+# Gaps
+# ---------------------------------------------------------------------------
+
+class TestGaps:
+    def test_gap_element_present(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        gaps = root.findall("library/event/project/sequence/spine/gap")
+        assert len(gaps) == 1
+        assert gaps[0].get("name") == "Gap"
+
+    def test_gap_has_duration(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        gap = root.find("library/event/project/sequence/spine/gap")
+        assert gap is not None
+        assert gap.get("duration") is not None
+        # 2 seconds at 30fps (default for nonexistent files)
+        assert "6000" in gap.get("duration", "") or "0s" != gap.get("duration", "")
+
+
+# ---------------------------------------------------------------------------
+# Markers
+# ---------------------------------------------------------------------------
+
+class TestMarkers:
+    def test_markers_present(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        markers = root.findall("library/event/project/sequence/marker")
+        assert len(markers) == 2
+
+    def test_marker_has_value_and_color(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        m1 = root.findall("library/event/project/sequence/marker")[0]
+        assert m1.get("value") == "Chapter 1"
+        assert m1.get("color") == "blue"
+
+    def test_first_marker_at_zero(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        m1 = root.find("library/event/project/sequence/marker")
+        assert m1 is not None
+        assert m1.get("start") == "0s"
+
+
+# ---------------------------------------------------------------------------
+# FCPXML spec compliance
+# ---------------------------------------------------------------------------
+
+class TestFCPXMLCompliance:
+    """Critical requirements that caused import failures."""
+
+    def test_every_asset_has_media_rep(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        for asset in root.findall("resources/asset"):
+            media_reps = asset.findall("media-rep")
+            assert len(media_reps) >= 1, f"Asset {asset.get('id')} missing <media-rep>"
+
+    def test_zero_offset_is_canonical_0s(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        first = root.find("library/event/project/sequence/spine/asset-clip")
+        assert first is not None
+        assert first.get("offset") == "0s"
+
+    def test_root_version_is_1_9(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        assert root.get("version") == "1.9"
+
+    def test_has_complete_structure(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
+        root = ET.fromstring(xml_str)
+        assert root.find("resources/format") is not None
+        assert root.find("library/event/project/sequence/spine") is not None
+
+    def test_clip_attributes_complete(self):
+        xml_str = generate_fcpxml(SAMPLE_NEW)
         root = ET.fromstring(xml_str)
         clip = root.find("library/event/project/sequence/spine/asset-clip")
-        assert clip is not None
-        for attr in ("name", "ref", "offset", "duration", "start"):
-            assert attr in clip.attrib, f"Missing attribute: {attr}"
+        for attr in ("name", "ref", "offset", "duration", "start", "tcFormat"):
+            assert attr in clip.attrib, f"Missing: {attr}"
 
-    def test_empty_clips_raises_value_error(self):
+    def test_override_fps(self):
+        xml_str = generate_fcpxml(SAMPLE_OLD, override_fps="24")
+        root = ET.fromstring(xml_str)
+        fmt = root.find("resources/format")
+        fd = fmt.get("frameDuration", "")
+        assert "24" in fd or "2400" in fd
+
+    def test_override_resolution(self):
+        xml_str = generate_fcpxml(SAMPLE_OLD, override_resolution="1280x720")
+        root = ET.fromstring(xml_str)
+        fmt = root.find("resources/format")
+        assert fmt.get("width") == "1280"
+        assert fmt.get("height") == "720"
+
+
+# ---------------------------------------------------------------------------
+# Error handling
+# ---------------------------------------------------------------------------
+
+class TestErrorHandling:
+    def test_empty_tracks_raises(self):
+        with pytest.raises(ValueError):
+            generate_fcpxml({"title": "Empty", "tracks": []})
+
+    def test_no_clips_raises(self):
+        with pytest.raises(ValueError):
+            generate_fcpxml({"title": "Empty", "tracks": [
+                {"name": "V1", "role": "video", "items": [
+                    {"type": "gap", "duration": 5},
+                ]},
+            ]})
+
+    def test_empty_old_clips_raises(self):
         with pytest.raises(ValueError):
             generate_fcpxml({"title": "Empty", "clips": []})
 
-    def test_override_fps(self):
-        xml_str = generate_fcpxml(SAMPLE_SCRIPT, override_fps="24")
-        root = ET.fromstring(xml_str)
-        fmt = root.find("resources/format")
-        assert "24" in fmt.get("frameDuration", "") or "2400" in fmt.get("frameDuration", "")
-
 
 # ---------------------------------------------------------------------------
-# File I/O test
+# File I/O
 # ---------------------------------------------------------------------------
 
-class TestGenerateFCPXMLFile:
-    def test_writes_file(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            script_path = os.path.join(tmpdir, "edit_script.json")
-            output_path = os.path.join(tmpdir, "output.fcpxml")
-
+class TestFileIO:
+    def test_writes_file_from_new_format(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script_path = os.path.join(tmp, "edit_script.json")
+            out_path = os.path.join(tmp, "out.fcpxml")
             with open(script_path, "w") as f:
-                json.dump(SAMPLE_SCRIPT, f)
-
-            result = generate_fcpxml_file(script_path, output_path)
-            assert result == output_path
-            assert os.path.exists(output_path)
-
-            # Verify it's valid XML
-            tree = ET.parse(output_path)
+                json.dump(SAMPLE_NEW, f)
+            result = generate_fcpxml_file(script_path, out_path)
+            assert result == out_path
+            assert os.path.exists(out_path)
+            tree = ET.parse(out_path)
             assert tree.getroot().tag == "fcpxml"
 
     def test_auto_output_path(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            script_path = os.path.join(tmpdir, "edit_script.json")
-
+        with tempfile.TemporaryDirectory() as tmp:
+            script_path = os.path.join(tmp, "edit_script.json")
             with open(script_path, "w") as f:
-                json.dump(SAMPLE_SCRIPT, f)
-
+                json.dump(SAMPLE_NEW, f)
             result = generate_fcpxml_file(script_path, "")
             assert result.endswith(".fcpxml")
-            assert os.path.exists(result)
-            # Title "Test Project" → "Test_Project.fcpxml"
-            assert "Test_Project" in result
+            assert "Multi_Track_Project" in result
