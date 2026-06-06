@@ -135,3 +135,4 @@ Timeline summary:
 3. **Time values**: In the new format, use float seconds (0, 13.5, 90.0). In the old format, use "MM:SS" strings.
 4. **File existence**: Ensure all `source` paths point to files that exist on the current machine. Use `--media-dir` if the edit script references paths from a different machine.
 5. **Error handling**: If `fcpxml generate` fails, read the error message carefully — it will tell you which clip or track has the problem.
+6. **Report issues**: If you encounter bugs or friction, create a `.md` file in the `feedback/` directory at the project root. Use the naming convention `YYYY-MM-DD-short-description.md`. See `feedback/README.md` for the template.

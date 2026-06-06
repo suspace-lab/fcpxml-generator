@@ -119,3 +119,14 @@ The tool exits with code 1 and prints to stderr on error. Common failures:
   - macOS: `brew install ffmpeg`
   - Ubuntu: `apt install ffmpeg`
   - Without ffprobe: defaults to 30fps / 1920×1080 / 60s duration
+
+## Reporting Issues
+
+If you encounter bugs, unexpected behavior, or friction using this tool,
+please create a `.md` file in the **`feedback/`** directory at the project root.
+
+See [`feedback/README.md`](../feedback/README.md) for the naming convention
+(`YYYY-MM-DD-brief-title.md`) and the issue template.
+
+The maintainer reviews the `feedback/` directory regularly and uses these
+reports to prioritize fixes and improvements.

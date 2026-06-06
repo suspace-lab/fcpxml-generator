@@ -126,6 +126,15 @@ We are the **only Python CLI tool** that takes a JSON edit script and produces
 FCPXML 1.9 output suitable for 剪映 import. No existing open-source tool fills
 this gap.
 
+## Feedback & Bug Reports
+
+If something doesn't work as expected, please help us improve!
+
+Create a Markdown file in the **[`feedback/`](feedback/)** directory describing
+your issue. See [`feedback/README.md`](feedback/README.md) for the template
+and naming convention. The maintainer reviews this directory regularly and
+will address your reports.
+
 ## Requirements
 
 - **Python ≥ 3.11**
