@@ -30,6 +30,10 @@ class ClipItem:
     filename: str = ""
     transition: str = "cut"
 
+    # Media type flags (auto-detected from probe if omitted)
+    has_video: bool | None = None    # None → auto-detect from file
+    has_audio: bool | None = None    # None → auto-detect from file
+
     # Metadata (informational, not written to FCPXML)
     description: str = ""
     dialogue: str = ""
@@ -141,6 +145,10 @@ class EditScript:
                 d["filename"] = item.filename
             if item.transition and item.transition != "cut":
                 d["transition"] = item.transition
+            if item.has_video is not None:
+                d["has_video"] = item.has_video
+            if item.has_audio is not None:
+                d["has_audio"] = item.has_audio
             if item.description:
                 d["description"] = item.description
             if item.dialogue:
@@ -242,6 +250,8 @@ class EditScript:
                 out_sec=float(out_val),
                 filename=data.get("filename", ""),
                 transition=data.get("transition", "cut"),
+                has_video=data.get("has_video"),
+                has_audio=data.get("has_audio"),
                 description=data.get("description", ""),
                 dialogue=data.get("dialogue", ""),
             )

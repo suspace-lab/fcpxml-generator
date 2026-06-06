@@ -78,6 +78,8 @@ Examples:
     g.add_argument("--fps", default=None, help="Override frame rate (e.g. 29.97)")
     g.add_argument("--resolution", default=None, help="Override resolution (WxH)")
     g.add_argument("--media-dir", default="", help="Local media directory")
+    g.add_argument("--dry-run", action="store_true",
+                   help="Preview timeline without writing FCPXML")
     g.set_defaults(_subcmd="generate")
 
     # probe
@@ -128,6 +130,8 @@ def _parse_bare_generate(argv: list[str]) -> tuple[str, argparse.Namespace]:
     parser.add_argument("--fps", default=None, help="Override frame rate")
     parser.add_argument("--resolution", default=None, help="Override resolution")
     parser.add_argument("--media-dir", default="", help="Local media directory")
+    parser.add_argument("--dry-run", action="store_true",
+                       help="Preview timeline without writing FCPXML")
     parser.add_argument("--version", action="version", version="fcpxml-generator 0.1.0")
 
     try:
@@ -148,12 +152,14 @@ def _parse_bare_generate(argv: list[str]) -> tuple[str, argparse.Namespace]:
 def _cmd_generate(args: argparse.Namespace) -> int:
     """`fcpxml generate` — core FCPXML generation."""
     try:
+        dry_run = getattr(args, "dry_run", False)
         generate_fcpxml_file(
             args.script,
             output_path=args.output,
             media_dir=args.media_dir,
             override_fps=args.fps,
             override_resolution=args.resolution,
+            dry_run=dry_run,
         )
     except FileNotFoundError as e:
         print(f"ERROR: {e}", file=sys.stderr)

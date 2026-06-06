@@ -24,7 +24,7 @@ from .models import (
     ValidationError,
     validate_script,
 )
-from .probe import probe_video, probe_multiple
+from .probe import MediaInfo, probe_media, probe_multiple, probe_video
 from .timecode import (
     detect_frame_rate,
     parse_timecode,
@@ -47,6 +47,8 @@ __all__ = [
     "ValidationError",
     "validate_script",
     # Probe
+    "MediaInfo",
+    "probe_media",
     "probe_video",
     "probe_multiple",
     # Timecode

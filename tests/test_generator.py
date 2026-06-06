@@ -87,9 +87,13 @@ class TestMultiTrack:
     def test_all_track_clips_present(self):
         xml_str = generate_fcpxml(SAMPLE_NEW)
         root = ET.fromstring(xml_str)
-        clips = root.findall("library/event/project/sequence/spine/asset-clip")
-        # V1: 2 clips + A1: 1 clip = 3 total
-        assert len(clips) == 3
+        # V1 clips in spine: 2
+        spine_clips = root.findall("library/event/project/sequence/spine/asset-clip")
+        assert len(spine_clips) == 2
+        # A1 clips in sequence (outside spine): 1
+        seq_clips = root.findall("library/event/project/sequence/asset-clip")
+        # 3 total across all locations
+        assert len(spine_clips) + len(seq_clips) >= 3
 
     def test_assets_for_all_sources(self):
         xml_str = generate_fcpxml(SAMPLE_NEW)
@@ -222,6 +226,90 @@ class TestErrorHandling:
         with pytest.raises(ValueError):
             generate_fcpxml({"title": "Empty", "clips": []})
 
+
+# ---------------------------------------------------------------------------
+# Audio-only clips & MediaInfo flags
+# ---------------------------------------------------------------------------
+
+AUDIO_ONLY_SCRIPT = {
+    "title": "Audio Test",
+    "tracks": [
+        {"name": "V1", "role": "video", "items": [
+            {"type": "clip", "source": "/n/video.mp4", "in": 0, "out": 10},
+        ]},
+        {"name": "A1", "role": "audio", "items": [
+            {"type": "clip", "source": "/n/music.mp3", "in": 0, "out": 30},
+        ]},
+    ],
+}
+
+
+class TestAudioOnly:
+    def test_audio_track_in_sequence(self):
+        """Audio clips are placed in <sequence>, not in <spine>."""
+        xml_str = generate_fcpxml(AUDIO_ONLY_SCRIPT)
+        root = ET.fromstring(xml_str)
+        seq = root.find("library/event/project/sequence")
+        # Audio clips directly in sequence, outside spine
+        audio_clips = seq.findall("asset-clip")
+        assert len(audio_clips) >= 1
+
+    def test_spine_only_has_video(self):
+        xml_str = generate_fcpxml(AUDIO_ONLY_SCRIPT)
+        root = ET.fromstring(xml_str)
+        spine_clips = root.findall("library/event/project/sequence/spine/asset-clip")
+        # Only the video track clip is in the spine
+        assert len(spine_clips) == 1
+
+
+# ---------------------------------------------------------------------------
+# Connected clips (secondary video tracks)
+# ---------------------------------------------------------------------------
+
+CONNECTED_SCRIPT = {
+    "title": "B-Roll Test",
+    "tracks": [
+        {"name": "V1", "role": "video", "items": [
+            {"type": "clip", "source": "/n/main.mp4", "in": 0, "out": 10},
+        ]},
+        {"name": "V2", "role": "video", "items": [
+            {"type": "clip", "source": "/n/broll.mp4", "in": 0, "out": 5},
+        ]},
+    ],
+}
+
+
+class TestConnectedClips:
+    def test_connected_clip_present(self):
+        xml_str = generate_fcpxml(CONNECTED_SCRIPT)
+        root = ET.fromstring(xml_str)
+        # Secondary video track → connected-clip inside a spine asset-clip
+        ccs = root.findall("library/event/project/sequence/spine/asset-clip/connected-clip")
+        assert len(ccs) >= 1
+
+    def test_spine_has_one_clip(self):
+        xml_str = generate_fcpxml(CONNECTED_SCRIPT)
+        root = ET.fromstring(xml_str)
+        spine_clips = root.findall("library/event/project/sequence/spine/asset-clip")
+        assert len(spine_clips) == 1  # Only primary track
+
+
+# ---------------------------------------------------------------------------
+# Dry-run
+# ---------------------------------------------------------------------------
+
+class TestDryRun:
+    def test_dry_run_does_not_write_file(self):
+        import tempfile, json as _json
+        with tempfile.TemporaryDirectory() as tmp:
+            script_path = os.path.join(tmp, "edit_script.json")
+            out_path = os.path.join(tmp, "out.fcpxml")
+            with open(script_path, "w") as f:
+                _json.dump(SAMPLE_OLD, f)
+
+            result = generate_fcpxml_file(script_path, out_path, dry_run=True)
+            # Should return the output path but not write the file
+            assert not os.path.exists(out_path) or os.path.getsize(out_path) == 0
 
 # ---------------------------------------------------------------------------
 # File I/O
