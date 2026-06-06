@@ -25,7 +25,7 @@ classifiers = [
 fcpxml = "fcpxml_generator.cli:main"
 
 [project.urls]
-Repository = "https://github.com/auto-video/fcpxml-generator"
+Repository = "https://github.com/exiarepairii/fcpxml-generator"
 
 [build-system]
 requires = ["hatchling"]
