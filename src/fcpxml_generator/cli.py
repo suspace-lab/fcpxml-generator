@@ -80,6 +80,8 @@ Examples:
     g.add_argument("--media-dir", default="", help="Local media directory")
     g.add_argument("--dry-run", action="store_true",
                    help="Preview timeline without writing FCPXML")
+    g.add_argument("--jianying", action="store_true",
+                   help="剪映兼容模式：扁平化所有轨道到 spine（不用 connected-clip）")
     g.set_defaults(_subcmd="generate")
 
     # probe
@@ -132,6 +134,8 @@ def _parse_bare_generate(argv: list[str]) -> tuple[str, argparse.Namespace]:
     parser.add_argument("--media-dir", default="", help="Local media directory")
     parser.add_argument("--dry-run", action="store_true",
                        help="Preview timeline without writing FCPXML")
+    parser.add_argument("--jianying", action="store_true",
+                       help="剪映兼容模式")
     parser.add_argument("--version", action="version", version="fcpxml-generator 0.1.0")
 
     try:
@@ -153,6 +157,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     """`fcpxml generate` — core FCPXML generation."""
     try:
         dry_run = getattr(args, "dry_run", False)
+        jianying = getattr(args, "jianying", False) or getattr(args, "jianying_compat", False)
         generate_fcpxml_file(
             args.script,
             output_path=args.output,
@@ -160,6 +165,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
             override_fps=args.fps,
             override_resolution=args.resolution,
             dry_run=dry_run,
+            jianying_compat=jianying,
         )
     except FileNotFoundError as e:
         print(f"ERROR: {e}", file=sys.stderr)

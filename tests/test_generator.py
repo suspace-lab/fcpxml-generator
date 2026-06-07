@@ -85,14 +85,13 @@ class TestMultiTrack:
         assert root.tag == "fcpxml"
 
     def test_all_track_clips_present(self):
-        xml_str = generate_fcpxml(SAMPLE_NEW)
+        xml_str = generate_fcpxml(SAMPLE_NEW, jianying_compat=False)
         root = ET.fromstring(xml_str)
-        # V1 clips in spine: 2
+        # V1 clips in spine: 2 (FCPX mode: only primary track on spine)
         spine_clips = root.findall("library/event/project/sequence/spine/asset-clip")
         assert len(spine_clips) == 2
         # A1 clips in sequence (outside spine): 1
         seq_clips = root.findall("library/event/project/sequence/asset-clip")
-        # 3 total across all locations
         assert len(spine_clips) + len(seq_clips) >= 3
 
     def test_assets_for_all_sources(self):
@@ -281,17 +280,31 @@ CONNECTED_SCRIPT = {
 
 class TestConnectedClips:
     def test_connected_clip_present(self):
-        xml_str = generate_fcpxml(CONNECTED_SCRIPT)
+        """FCPX/Resolve mode: secondary tracks → connected-clip."""
+        xml_str = generate_fcpxml(CONNECTED_SCRIPT, jianying_compat=False)
         root = ET.fromstring(xml_str)
-        # Secondary video track → connected-clip inside a spine asset-clip
         ccs = root.findall("library/event/project/sequence/spine/asset-clip/connected-clip")
         assert len(ccs) >= 1
 
-    def test_spine_has_one_clip(self):
-        xml_str = generate_fcpxml(CONNECTED_SCRIPT)
+    def test_spine_has_one_clip_in_fcpx_mode(self):
+        xml_str = generate_fcpxml(CONNECTED_SCRIPT, jianying_compat=False)
         root = ET.fromstring(xml_str)
         spine_clips = root.findall("library/event/project/sequence/spine/asset-clip")
-        assert len(spine_clips) == 1  # Only primary track
+        assert len(spine_clips) == 1  # Primary only; secondary = connected-clip children
+
+    def test_jianying_mode_flattens_all_tracks(self):
+        """剪映 compat: all video tracks flattened to spine."""
+        xml_str = generate_fcpxml(CONNECTED_SCRIPT, jianying_compat=True)
+        root = ET.fromstring(xml_str)
+        spine_clips = root.findall("library/event/project/sequence/spine/asset-clip")
+        assert len(spine_clips) == 2  # V1 + V2 both flat on spine
+
+    def test_jianying_mode_no_connected_clips(self):
+        """剪映 compat: zero <connected-clip> elements."""
+        xml_str = generate_fcpxml(CONNECTED_SCRIPT, jianying_compat=True)
+        root = ET.fromstring(xml_str)
+        ccs = root.findall(".//connected-clip")
+        assert len(ccs) == 0
 
 
 # ---------------------------------------------------------------------------

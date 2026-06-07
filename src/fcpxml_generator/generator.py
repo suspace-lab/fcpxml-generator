@@ -53,10 +53,16 @@ def generate_fcpxml(
     media_dir: str = "",
     override_fps: str | None = None,
     override_resolution: str | None = None,
+    jianying_compat: bool = False,
 ) -> str:
     """Generate a complete FCPXML 1.9 document string.
 
     Accepts either an EditScript object or a raw JSON dict (backward compat).
+
+    Args:
+        jianying_compat: If True, flatten all video tracks onto the spine
+            (no <connected-clip>). Required for 剪映 import compatibility.
+            Defaults to False (FCPX/Resolve mode with connected clips).
 
     Returns a complete FCPXML 1.9 document as a UTF-8 string.
     """
@@ -124,23 +130,32 @@ def generate_fcpxml(
     if not video_tracks and not audio_tracks:
         raise ValueError("No video or audio tracks found")
 
-    # Primary storyline: first video track → spine
     spine = ET.SubElement(sequence, "spine")
 
-    if video_tracks:
-        _build_track_items(spine, video_tracks[0].items, asset_ids, common_fr, "spine")
+    if jianying_compat:
+        # --- 剪映 compat: flatten ALL video tracks onto the spine ---
+        # 剪映 doesn't understand <connected-clip>. Everything must be
+        # a flat <asset-clip> on the spine.
+        if video_tracks:
+            for vt in video_tracks:
+                _build_track_items(spine, vt.items, asset_ids, common_fr, f"spine:{vt.name}")
+        else:
+            _build_track_items(spine, audio_tracks[0].items, asset_ids, common_fr, "spine")
+            audio_tracks = audio_tracks[1:]
     else:
-        # Audio-only timeline: first audio track → spine
-        _build_track_items(spine, audio_tracks[0].items, asset_ids, common_fr, "spine")
-        audio_tracks = audio_tracks[1:]
+        # --- FCPX/Resolve: primary spine + connected-clip for secondary ---
+        if video_tracks:
+            _build_track_items(spine, video_tracks[0].items, asset_ids, common_fr, "spine")
+        else:
+            _build_track_items(spine, audio_tracks[0].items, asset_ids, common_fr, "spine")
+            audio_tracks = audio_tracks[1:]
 
-    # Secondary video tracks → <connected-clip> inside the spine
-    for vtrack in video_tracks[1:]:
-        _build_connected_clips(spine, vtrack.items, asset_ids, common_fr, vtrack.name)
+        for vtrack in video_tracks[1:]:
+            _build_connected_clips(spine, vtrack.items, asset_ids, common_fr, vtrack.name)
 
-    # Audio tracks → <asset-clip> directly in sequence (FCPXML audio lanes)
+    # Audio tracks → <asset-clip> directly in sequence
     for atrack in audio_tracks:
-        _build_audio_lane(sequence, atrack.items, asset_ids, common_fr, atrack.name)
+        _build_track_items(sequence, atrack.items, asset_ids, common_fr, f"audio:{atrack.name}")
 
     # Markers
     for marker in script.markers:
@@ -166,6 +181,7 @@ def generate_fcpxml_file(
     override_fps: str | None = None,
     override_resolution: str | None = None,
     dry_run: bool = False,
+    jianying_compat: bool = False,
 ) -> str:
     """Read edit_script JSON, generate FCPXML, write to file.
 
@@ -186,6 +202,7 @@ def generate_fcpxml_file(
         media_dir=media_dir,
         override_fps=override_fps,
         override_resolution=override_resolution,
+        jianying_compat=jianying_compat,
     )
 
     with open(output_path, "w", encoding="utf-8") as f:
