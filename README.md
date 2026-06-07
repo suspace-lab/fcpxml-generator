@@ -45,6 +45,12 @@ fcpxml edit_script.json --fps 29.97 --resolution 1920x1080
 
 # Point to local media copies
 fcpxml edit_script.json --media-dir ./local_videos/
+
+# 剪映 compatibility mode (required for 剪映 import)
+fcpxml edit_script.json --jianying -o my_vlog.fcpxml
+
+# Generate SRT subtitles & title overlays
+fcpxml srt subtitles.json -o my_vlog.srt
 ```
 
 ### Input Format

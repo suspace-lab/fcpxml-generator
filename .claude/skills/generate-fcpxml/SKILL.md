@@ -1,14 +1,15 @@
 ---
 name: fcpxml-generate
-description: Generate an FCPXML 1.9 timeline file from an edit script JSON. Importable into 剪映专业版, Final Cut Pro X, and DaVinci Resolve.
+description: Generate FCPXML 1.9 timeline + SRT subtitles from edit scripts. Importable into 剪映专业版, Final Cut Pro X, and DaVinci Resolve.
 ---
 
-# Generate FCPXML Timeline
+# Generate FCPXML Timeline & SRT Subtitles
 
 Use this skill whenever the user asks to:
 - "generate a timeline" / "create an FCPXML" / "export to 剪映"
-- "make an edit timeline" / "produce a project file for Premiere/FCP/剪映"
-- "create a rough cut" / "export edit decision to XML"
+- "make an edit timeline" / "produce a project file"
+- "add subtitles" / "generate captions" / "export SRT"
+- "create a rough cut" / "export edit decision"
 
 ## Prerequisites
 
@@ -18,7 +19,7 @@ pip install fcpxml-generator
 # or: uv tool install fcpxml-generator
 ```
 
-Verify it's available:
+Verify:
 ```bash
 fcpxml --version
 ```
@@ -27,53 +28,42 @@ fcpxml --version
 
 ### Step 1: Gather footage metadata
 
-Probe all video files to get accurate timing data:
 ```bash
 fcpxml probe video1.mp4 video2.mp4 --format json
 ```
 
-This gives you: `path`, `fps`, `duration_sec`, `total_frames`, `width`, `height`.
+Returns: `path`, `fps`, `duration_sec`, `total_frames`, `width`, `height`.
 
-### Step 2: Analyze footage content
+### Step 2: Analyze footage
 
-Use transcription (WhisperX) and visual analysis to understand what's in
-each video. Produce per-clip metadata:
-- `description`: what's happening in this segment
-- `dialogue`: transcript or summary of speech
-- `in`/`out`: timecode boundaries within the source file
+Use transcription (WhisperX) + visual analysis. Produce per-clip metadata:
+- `description`: what's happening
+- `dialogue`: transcript or summary
+- `in`/`out`: timecode boundaries
 
 ### Step 3: Make editorial decisions
 
-Based on the user's preferences (duration, style, narrative), select clips
-and arrange them in order. Consider:
-- **Duration target**: how long should the final video be?
-- **Pacing**: fast (2-5s clips), natural (5-10s), or cinematic (10-20s)
-- **Narrative**: chronological, thematic, or hook-driven
-- **Audio**: any background music or voiceover tracks?
+Consider: duration target, pacing, narrative structure, audio tracks.
 
 ### Step 4: Write the edit script
 
-Create `edit_script.json` following the schema in `docs/edit-script-schema.md`.
-
-**New multi-track format (recommended):**
+Create `edit_script.json`. **Multi-track format (recommended):**
 ```json
 {
   "title": "My Vlog",
   "tracks": [
     {
-      "name": "V1",
-      "role": "video",
+      "name": "V1", "role": "video",
       "items": [
-        {"type": "clip", "source": "/path/to/video.mp4", "in": 0, "out": 13},
+        {"type": "clip", "source": "/path/video.mp4", "in": 0, "out": 13},
         {"type": "gap", "duration": 2},
-        {"type": "clip", "source": "/path/to/video2.mp4", "in": 5, "out": 20}
+        {"type": "clip", "source": "/path/video2.mp4", "in": 5, "out": 20}
       ]
     },
     {
-      "name": "A1",
-      "role": "audio",
+      "name": "A1", "role": "audio",
       "items": [
-        {"type": "clip", "source": "/path/to/music.mp3", "in": 0, "out": 60}
+        {"type": "clip", "source": "/path/music.mp3", "in": 0, "out": 60}
       ]
     }
   ],
@@ -83,56 +73,81 @@ Create `edit_script.json` following the schema in `docs/edit-script-schema.md`.
 }
 ```
 
-**Old flat format (backward compatible):**
+Flat format (backward compat):
 ```json
 {
   "title": "My Vlog",
   "clips": [
-    {"source": "/path/to/video.mp4", "in": "00:00", "out": "00:13"}
+    {"source": "/path/video.mp4", "in": "00:00", "out": "00:13"}
   ]
 }
 ```
 
-### Step 5: Validate the script
+### Step 5: Write subtitles & title overlays
+
+Create `subtitles.json`. See `docs/srt-schema.md` for full spec.
+```json
+[
+  {"text": "今天天气真好",     "start": 0, "end": 3, "type": "subtitle"},
+  {"text": "第一章：出发",     "start": 3, "end": 6, "type": "title"},
+  {"text": "我们去散步吧",     "start": 6, "end": 9, "type": "subtitle"}
+]
+```
+
+- `"type": "subtitle"` — dialogue captions (bottom of screen)
+- `"type": "title"` — decorative title overlays / 花字 (styled in 剪映)
+- Time values: float seconds or `"HH:MM:SS,mmm"` SRT timecode
+
+### Step 6: Validate
 
 ```bash
 fcpxml validate edit_script.json
 ```
 
-Fix any errors before proceeding.
-
-### Step 6: Generate FCPXML
+### Step 7: Generate
 
 ```bash
-fcpxml generate edit_script.json -o timeline.fcpxml
+# 剪映 (recommended — uses flattening for 剪映 compatibility)
+fcpxml generate edit_script.json --jianying -o vlog.fcpxml
+
+# FCPX / DaVinci Resolve (default — preserves connected-clip structure)
+fcpxml generate edit_script.json -o vlog.fcpxml
+
+# Dry-run preview
+fcpxml generate edit_script.json --jianying --dry-run
+
+# Override timeline settings
+fcpxml generate edit_script.json --jianying --fps 29.97 --resolution 1920x1080 -o vlog.fcpxml
+
+# Generate SRT
+fcpxml srt subtitles.json -o vlog.srt
 ```
 
-With overrides:
-```bash
-fcpxml generate edit_script.json -o timeline.fcpxml --fps 29.97 --resolution 1920x1080
-```
-
-### Step 7: Report to user
+### Step 8: Report to user
 
 ```
-✅ Timeline generated: timeline.fcpxml
+✅ Generated:
+  - vlog.fcpxml (timeline)
+  - vlog.srt (3 cues: 2 subtitles, 1 title)
 
-Import steps:
-  - 剪映专业版: 文件 → 导入工程 → 选择 timeline.fcpxml
-  - Final Cut Pro: File → Import → XML
-  - DaVinci Resolve: File → Import → Timeline → FCPXML
+Import into 剪映专业版:
+  1. 文件 → 导入工程 → 选择 vlog.fcpxml
+  2. 拖入 vlog.srt → 自动识别字幕轨
+  3. 花字条目换样式: 选中 → 文本 → 花字模板
 
 Timeline summary:
   - Duration: ~2m 34s
   - Clips: 15 across 2 tracks (V1, A1)
+  - Subtitles: 24 cues
+  - Titles: 3 cues
   - Markers: 3 chapter markers
 ```
 
 ## Important Rules
 
-1. **Always validate before generating.** Run `fcpxml validate` first.
-2. **Use absolute paths** for all `source` fields. Relative paths cause import failures.
-3. **Time values**: In the new format, use float seconds (0, 13.5, 90.0). In the old format, use "MM:SS" strings.
-4. **File existence**: Ensure all `source` paths point to files that exist on the current machine. Use `--media-dir` if the edit script references paths from a different machine.
-5. **Error handling**: If `fcpxml generate` fails, read the error message carefully — it will tell you which clip or track has the problem.
-6. **Report issues**: If you encounter bugs or friction, create a `.md` file in the `feedback/` directory at the project root. Use the naming convention `YYYY-MM-DD-short-description.md`. See `feedback/README.md` for the template.
+1. **Always validate before generating.** `fcpxml validate` first.
+2. **剪映 → `--jianying`**. Always use `--jianying` when targeting 剪映. 剪映 does NOT understand `<connected-clip>` — without this flag, secondary tracks are lost.
+3. **Absolute paths** for all `source` fields. Relative paths cause import failures.
+4. **Time values**: new format uses float seconds (0, 13.5). Old format uses "MM:SS" strings.
+5. **Error handling**: read stderr carefully — it tells you which clip has the problem.
+6. **Report issues**: create `.md` in `feedback/` directory. See `feedback/README.md`.

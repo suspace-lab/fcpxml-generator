@@ -49,11 +49,20 @@ Output: `edit_script.json`
 fcpxml edit_script.json -o my_vlog.fcpxml
 ```
 
-### Step 4: Import into NLE
+### Step 4: Generate SRT (optional)
 
-- **剪映专业版**: 文件 → 导入工程 → 选择 `.fcpxml`
+```bash
+# subtitles.json: [{"text":"...", "start":0, "end":3, "type":"subtitle"}]
+fcpxml srt subtitles.json -o output.srt
+```
+
+### Step 5: Import into NLE
+
+- **剪映专业版**: 文件 → 导入工程 → 选择 `.fcpxml`，然后拖入 `.srt`
 - **Final Cut Pro X**: File → Import → XML
 - **DaVinci Resolve**: File → Import → Timeline → FCPXML
+
+> ⚠️ **剪映用户必读**: 生成 FCPXML 时必须加 `--jianying` 标志，否则多轨道素材只显示第一个。
 
 ## Integration with Claude Code
 
