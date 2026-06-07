@@ -22,6 +22,7 @@ import sys
 from .generator import generate_fcpxml_file
 from .models import EditScript, validate_script
 from .probe import probe_video
+from .subtitles import generate_srt_file
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,6 +40,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_probe(args)
     elif cmd == "validate":
         return _cmd_validate(args)
+    elif cmd == "srt":
+        return _cmd_srt(args)
     elif cmd == "help":
         parser.print_help()
         return 0
@@ -97,6 +100,12 @@ Examples:
     v.add_argument("--json", action="store_true", help="Output as JSON")
     v.set_defaults(_subcmd="validate")
 
+    # srt
+    s = subs.add_parser("srt", help="Generate SRT subtitles/titles from JSON")
+    s.add_argument("input", help="Path to subtitles JSON")
+    s.add_argument("-o", "--output", default="", help="Output .srt file")
+    s.set_defaults(_subcmd="srt")
+
     return parser
 
 
@@ -111,7 +120,7 @@ def _detect_command(argv: list[str]) -> tuple[str, argparse.Namespace]:
     if argv[0] in ("-h", "--help"):
         return ("help", argparse.Namespace())
 
-    if argv[0] in ("generate", "probe", "validate"):
+    if argv[0] in ("generate", "probe", "validate", "srt"):
         parser = _build_parser()
         args = parser.parse_args(argv)
         return (argv[0], args)
@@ -255,3 +264,16 @@ def _cmd_validate(args: argparse.Namespace) -> int:
             print(f"{pfx} {e.path}: {e.message}")
 
     return 1 if error_count > 0 else 0
+
+
+def _cmd_srt(args: argparse.Namespace) -> int:
+    """`fcpxml srt` — generate SRT subtitles/titles from JSON."""
+    try:
+        generate_srt_file(args.input, output_path=args.output)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    return 0

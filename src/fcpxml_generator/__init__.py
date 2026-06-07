@@ -25,6 +25,7 @@ from .models import (
     validate_script,
 )
 from .probe import MediaInfo, probe_media, probe_multiple, probe_video
+from .subtitles import SubtitleEntry, generate_srt, generate_srt_file
 from .timecode import (
     detect_frame_rate,
     parse_timecode,
@@ -51,6 +52,10 @@ __all__ = [
     "probe_media",
     "probe_video",
     "probe_multiple",
+    # Subtitles
+    "SubtitleEntry",
+    "generate_srt",
+    "generate_srt_file",
     # Timecode
     "detect_frame_rate",
     "resolve_frame_rate",
